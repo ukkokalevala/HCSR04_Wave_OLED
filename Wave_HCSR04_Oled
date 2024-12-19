@@ -1,0 +1,77 @@
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define TRIG_PIN D5
+#define ECHO_PIN D6
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+int waveData[SCREEN_WIDTH] = {0}; // Array to hold wave data
+
+void setup() {
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    while (true);
+  }
+  display.clearDisplay();
+  display.display();
+}
+
+void loop() {
+  int distance = measureDistance();
+  int smoothedDistance = smoothDistance(distance); // Apply smoothing
+  int y = map(smoothedDistance, 2, 400, 0, SCREEN_HEIGHT - 1); // Map smoothed distance
+  updateWaveData(y);
+  drawWave();
+  delay(100);
+}
+
+int measureDistance() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  int distance = duration * 0.034 / 2; // Convert to cm
+  return constrain(distance, 2, 400); // Limit range to HC-SR04 specs
+}
+
+int smoothDistance(int distance) {
+  static int readings[5] = {0}; // Array to store last 5 readings
+  static int index = 0;         // Current index in the array
+  static int total = 0;         // Running total of the last 5 readings
+
+  // Subtract the oldest reading, add the new one
+  total -= readings[index];
+  readings[index] = distance;
+  total += readings[index];
+
+  // Advance to the next position in the array
+  index = (index + 1) % 5;
+
+  // Return the average of the last 5 readings
+  return total / 5;
+}
+
+void updateWaveData(int newY) {
+  for (int i = 0; i < SCREEN_WIDTH - 1; i++) {
+    waveData[i] = waveData[i + 1]; // Shift left
+  }
+  waveData[SCREEN_WIDTH - 1] = newY; // Add new data
+}
+
+void drawWave() {
+  display.clearDisplay();
+  for (int x = 0; x < SCREEN_WIDTH - 1; x++) {
+    display.drawLine(x, waveData[x], x + 1, waveData[x + 1], SSD1306_WHITE);
+  }
+  display.display();
+}
